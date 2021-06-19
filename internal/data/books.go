@@ -1,7 +1,10 @@
 package data
 
 import (
+	"database/sql"
+	"errors"
 	"github.com/adikzz/finalGolang/internal/validator"
+	"github.com/lib/pq"
 	"time"
 )
 
@@ -30,5 +33,91 @@ func ValidateBook(v *validator.Validator, book *Book) {
 	v.Check(len(book.Genres) >= 1, "genres", "must contain at least 1 genre")
 	v.Check(len(book.Genres) <= 5, "genres", "must not contain more than 5 genres")
 	v.Check(validator.Unique(book.Genres), "genres", "must not contain duplicate values")
+}
 
+type BookModel struct {
+	DB *sql.DB
+}
+
+func (b BookModel) Insert(book *Book) error {
+	query := `INSERT INTO books (title, year, pages, genres)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, created_at, version`
+
+	args := []interface{}{book.Title, book.Year, book.Pages, pq.Array(book.Genres)}
+	return b.DB.QueryRow(query, args...).Scan(&book.ID, &book.CreatedAt, &book.Version)
+}
+
+func (b BookModel) Get(id int64) (*Book, error) {
+	if id < 1 {
+		return nil, ErrRecordNotFound
+	}
+	query := `
+		SELECT id, created_at, title, year, pages, genres, version
+		FROM books
+		WHERE id = $1`
+
+	var book Book
+	err := b.DB.QueryRow(query, id).Scan(
+		&book.ID,
+		&book.CreatedAt,
+		&book.Title,
+		&book.Year,
+		&book.Pages,
+		pq.Array(&book.Genres),
+		&book.Version,
+	)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	return &book, nil
+}
+
+func (b BookModel) Update(book *Book) error {
+	query := `
+		UPDATE books
+		SET title = $1, year = $2, pages = $3, genres = $4, version = version + 1
+		WHERE id = $5
+		RETURNING version`
+	// Create an args slice containing the values for the placeholder parameters.
+	args := []interface{}{
+		book.Title,
+		book.Year,
+		book.Pages,
+		pq.Array(book.Genres),
+		book.ID,
+	}
+
+	return b.DB.QueryRow(query, args...).Scan(&book.Version)
+}
+
+func (b BookModel) Delete(id int64) error {
+	if id < 1 {
+		return ErrRecordNotFound
+	}
+	query := `
+		DELETE FROM books
+		WHERE id = $1`
+
+	result, err := b.DB.Exec(query, id)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
+	}
+	return nil
 }
