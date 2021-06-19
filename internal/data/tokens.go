@@ -11,15 +11,16 @@ import (
 )
 
 const (
-	ScopeActivation = "activation"
+	ScopeActivation     = "activation"
+	ScopeAuthentication = "authentication"
 )
 
 type Token struct {
-	Plaintext string
-	Hash      []byte
-	UserID    int64
-	Expiry    time.Time
-	Scope     string
+	Plaintext string    `json:"token"`
+	Hash      []byte    `json:"-"`
+	UserID    int64     `json:"-"`
+	Expiry    time.Time `json:"expiry"`
+	Scope     string    `json:"-"`
 }
 
 func generateToken(userID int64, ttl time.Duration, scope string) (*Token, error) {
@@ -48,13 +49,10 @@ func ValidateTokenPlaintext(v *validator.Validator, tokenPlaintext string) {
 	v.Check(len(tokenPlaintext) == 26, "token", "must be 26 bytes long")
 }
 
-// Define the TokenModel type.
 type TokenModel struct {
 	DB *sql.DB
 }
 
-// The New() method is a shortcut which creates a new Token struct and then inserts the
-// data in the tokens table.
 func (m TokenModel) New(userID int64, ttl time.Duration, scope string) (*Token, error) {
 	token, err := generateToken(userID, ttl, scope)
 	if err != nil {
@@ -75,7 +73,6 @@ VALUES ($1, $2, $3, $4)`
 	return err
 }
 
-// DeleteAllForUser() deletes all tokens for a specific user and scope.
 func (m TokenModel) DeleteAllForUser(scope string, userID int64) error {
 	query := `
 DELETE FROM tokens
