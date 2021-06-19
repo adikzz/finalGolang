@@ -11,7 +11,6 @@ var ErrInvalidPagesFormat = errors.New("invalid pages format")
 type Pages int32
 
 func (p *Pages) UnmarshalJSON(jsonValue []byte) error {
-
 	unquotedJSONValue, err := strconv.Unquote(string(jsonValue))
 	if err != nil {
 		return ErrInvalidPagesFormat
